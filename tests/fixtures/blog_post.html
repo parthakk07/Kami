@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Small Caches, Big Wins | The Systems Notebook</title>
+<meta name="author" content="Ana Rivera">
+<meta property="og:title" content="Small Caches, Big Wins">
+<meta property="og:site_name" content="The Systems Notebook">
+<meta property="article:published_time" content="2025-03-14">
+</head>
+<body>
+<header class="site-header">
+  <nav><a href="/">Home</a> <a href="/archive">Archive</a> <a href="/about">About</a> <a href="/subscribe">Subscribe</a></nav>
+</header>
+<div class="layout">
+<aside class="sidebar">
+  <h3>Popular posts</h3>
+  <ul><li><a href="/a">Ten tips for faster builds</a></li><li><a href="/b">My desk setup</a></li></ul>
+  <p>Sign up for the newsletter to get new posts by email.</p>
+</aside>
+<main>
+<article class="post">
+  <h1>Small Caches, Big Wins</h1>
+  <p class="byline">By Ana Rivera, March 14, 2025</p>
+  <p>Most teams size their caches by gut feeling, and most of them buy far more memory than they need. In this post we show that a cache one tenth the usual size served the same hit rate for our search service. The reason is that the access pattern was heavily skewed toward a small set of popular keys.</p>
+  <p>We first describe the workload, then the experiment, and finally what we would do differently. The numbers come from three weeks of production traffic.</p>
+
+  <h2>The workload</h2>
+  <p>Our search service answers about forty thousand queries per second at peak. Each query looks up a ranking profile, and profiles are expensive to build because they join data from four different stores. We call the set of keys that receive most of the traffic the hot set (HS). Measuring the hot set turned out to be the most useful thing we did.</p>
+  <p>Over three weeks, the hottest one percent of keys received seventy two percent of all lookups. The long tail was enormous but almost never read twice within an hour, which means caching it bought us very little.</p>
+  <ul>
+    <li>Peak traffic: about forty thousand queries per second.</li>
+    <li>Distinct keys per day: roughly nine million.</li>
+    <li>Share of lookups going to the hottest one percent of keys: seventy two percent.</li>
+  </ul>
+
+  <h2>The experiment</h2>
+  <p>We ran two cache sizes side by side for a week, splitting traffic by user id so that each user always hit the same configuration. The large cache held twenty gigabytes per node and the small cache held two gigabytes per node. Both used least recently used eviction, known as LRU, with the same time to live.</p>
+  <p>The small cache reached a hit rate of ninety one percent against ninety three percent for the large one. Because the hot set fits comfortably in two gigabytes, the extra eighteen gigabytes only stored keys that were evicted before anyone asked for them again, and therefore they added cost without adding hits.</p>
+  <pre><code>hit_rate(small) = 0.91
+hit_rate(large) = 0.93
+memory saved   = 90%</code></pre>
+  <blockquote><p>The last two percent of hit rate cost us nine times the memory.</p></blockquote>
+
+  <h2>What we would do differently</h2>
+  <p>We would measure the hot set before buying hardware. A one day sample of access logs is enough to estimate it, and the estimate was within five percent of the three week figure in our case. We also learned that a smaller cache warms up faster after a deploy, which reduced the latency spikes we used to see every release.</p>
+  <p>The main lesson is simple: size the cache to the hot set, not to the whole key space, and check the skew of your own traffic before you trust anyone's rule of thumb, including this one.</p>
+
+  <h2>References</h2>
+  <ul><li>Breslau et al. Web caching and Zipf-like distributions. 1999.</li></ul>
+</article>
+</main>
+</div>
+<footer class="site-footer"><p>Copyright 2025 The Systems Notebook. All rights reserved.</p><p>Privacy policy. Terms of service. Cookie settings.</p></footer>
+</body>
+</html>

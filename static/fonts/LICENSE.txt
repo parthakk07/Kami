@@ -1,0 +1,5 @@
+Fonts bundled here are subset to Latin and converted to WOFF2. All are licensed under the
+SIL Open Font License, Version 1.1 (https://openfontlicense.org).
+
+- Newsreader: Copyright 2020 The Newsreader Project Authors (Production Type).
+- IBM Plex Sans, IBM Plex Mono: Copyright 2017 IBM Corp.

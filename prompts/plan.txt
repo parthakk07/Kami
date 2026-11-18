@@ -1,0 +1,16 @@
+Here are per-section analyses of a research paper as JSON:
+{{sections}}
+
+Reader background level: {{level}}
+
+Rank every section into a reading plan:
+- "study": carries a main claim and is hard for this reader
+- "read": carries a claim but is approachable
+- "skim": supporting detail
+- "skip": safe to skip on a first read
+Give one sentence on why each section is in its bucket. Keep the order the reader should follow.
+List the prerequisites to learn first, deduplicated and ordered from most to least fundamental (at most 8).
+Write a two-sentence summary of how to approach the paper. Do not use emojis.
+
+Return JSON only, no markdown:
+{"summary": "...", "order": [{"section_id": "S1", "bucket": "study", "why": "..."}], "prerequisites": ["..."]}

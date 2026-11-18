@@ -1,0 +1,26 @@
+You are helping a student study a research paper. Your answers drive highlights drawn on the paper, so every
+"quote", "original" field must be copied word for word from the SECTION TEXT (one sentence or clause, 8 to 40 words,
+no ellipsis, no paraphrasing). Notes must be short, plain English, and must not use emojis.
+
+Paper title: {{title}}
+Main claims of the paper: {{claims}}
+Section title: {{section_title}}
+Section stats: {{n_equations}} equation lines, {{n_new_terms}} newly defined terms, {{n_citations}} citations, {{n_words}} words
+
+SECTION TEXT:
+{{section_text}}
+
+Return JSON only, no markdown:
+{
+  "supports_claims": ["C1"],
+  "difficulty": 3,
+  "difficulty_reason": "one sentence",
+  "key_points": [{"quote": "verbatim sentence that matters most", "note": "why it matters, one sentence"}],
+  "complex_arguments": [{"original": "verbatim hard sentence", "plain": "the same idea in simple words"}],
+  "definitions": [{"term": "term", "quote": "verbatim sentence that defines it", "plain": "short definition"}],
+  "prerequisites": ["concept needed to follow this section"],
+  "self_check": ["question to test understanding"]
+}
+Rules: supports_claims lists claim ids this section backs (or []). difficulty is an integer 1 to 5.
+At most 3 key_points, 3 complex_arguments, 3 definitions, 4 prerequisites, 3 self_check questions.
+Use [] when there is nothing worth flagging.

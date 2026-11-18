@@ -1,0 +1,12 @@
+You are reading a research paper. From the text below, list the paper's main claims (at most 5).
+For each claim give:
+- id: C1, C2, ...
+- claim: one plain-English sentence a second-year student can understand
+- quote: the single sentence from the TEXT that states this claim, copied word for word (no paraphrasing, no ellipsis)
+- evidence_hint: what kind of evidence would support it (theorem, experiment, ablation, benchmark)
+
+Return JSON only, no markdown, no commentary:
+{"claims": [{"id": "C1", "claim": "...", "quote": "...", "evidence_hint": "..."}]}
+
+TEXT:
+{{text}}

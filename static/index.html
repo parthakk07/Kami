@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kami</title>
+<meta name="description" content="Paste a paper or article. Get it back with the key claims, dense arguments and definitions marked, and a plan for what to read first.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/plex-sans.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/style.css">
+<script>
+try {
+  var t = localStorage.getItem("ph-theme");
+  var dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  if (dark) document.documentElement.setAttribute("data-theme", "dark");
+} catch (e) {}
+</script>
+</head>
+<body class="view-home">
+<header class="topbar">
+  <a class="wordmark" href="/" id="homeLink" aria-label="Kami, home"><span>Kami</span></a>
+  <div class="doc-title" id="docTitle"></div>
+  <nav class="top-actions">
+    <button class="btn quiet only-reader" id="panelToggle" type="button" aria-controls="panel" aria-expanded="false"><span class="wide-only">Reading plan</span><span class="narrow-only">Plan</span></button>
+    <a class="btn quiet not-home" href="/" id="newLink">New<span class="wide-only">&nbsp;paper</span></a>
+    <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false" aria-label="Switch to dark theme" title="Switch to dark theme">
+      <span class="theme-label">DARK</span>
+    </button>
+  </nav>
+</header>
+
+<div class="legend only-reader" id="legend" role="toolbar" aria-label="Show or hide highlight types">
+  <button class="chip on" data-type="claim" type="button"><i></i>Key claims<span class="n"></span></button>
+  <button class="chip on" data-type="key" type="button"><i></i>Important<span class="n"></span></button>
+  <button class="chip on" data-type="complex" type="button"><i></i>Complex<span class="n"></span></button>
+  <button class="chip on" data-type="definition" type="button"><i></i>Definitions<span class="n"></span></button>
+  <button class="chip on" data-type="badge" type="button"><i></i>Section labels<span class="n"></span></button>
+  <span class="legend-meta" id="analyzerTag"></span>
+</div>
+
+<main id="home" class="home view">
+  <section class="hero">
+    <p class="eyebrow">A reading aid for research papers and long articles</p>
+    <h1>Read the parts that <span class="hl-demo">matter</span> first.</h1>
+    <p class="lede">Give it a paper or a blog post. You get the same text back with the key claims, dense arguments and definitions marked, plus a plan for which sections to study, read, skim or skip.</p>
+
+    <form id="intake" class="intake" novalidate>
+      <div class="field">
+        <label class="sr" for="urlInput">Link to a paper or article</label>
+        <input id="urlInput" name="url" type="text" inputmode="url" autocomplete="off" spellcheck="false"
+               placeholder="Paste an arXiv link, a PDF link, or a blog post URL">
+        <button class="btn primary" type="submit">Highlight</button>
+      </div>
+      <div class="drop" id="dropZone">
+        <span>Drop a PDF or a photo of a page here, or</span>
+        <label class="linkish" for="fileInput">choose a file</label>
+        <input id="fileInput" type="file" accept="application/pdf,image/*,.html,.htm" hidden>
+      </div>
+      <p class="form-error" id="formError" role="alert"></p>
+    </form>
+
+    <div class="examples">
+      <span class="examples-label">Or try</span>
+      <button type="button" class="example" data-sample="attention">Attention Is All You Need<small>Bundled PDF, works offline</small></button>
+      <button type="button" class="example" data-url="https://arxiv.org/abs/1706.03762">arxiv.org/abs/1706.03762<small>arXiv abstract page</small></button>
+      <button type="button" class="example" data-url="https://lilianweng.github.io/posts/2023-06-23-agent/">LLM Powered Autonomous Agents<small>Blog post by Lilian Weng</small></button>
+    </div>
+  </section>
+
+  <section class="guide">
+    <div class="specimen">
+      <h2>What gets marked</h2>
+      <p class="specimen-text"><mark class="hl claim">We show that the model reaches the same accuracy with a tenth of the training data.</mark> The gain comes from the pre-training stage. <mark class="hl definition">We call this stage warm-up distillation (WD).</mark> <mark class="hl complex">Because the student only sees the teacher's soft targets, its gradient variance falls as the temperature rises, which bounds the error term in Eq. 3.</mark> <mark class="hl key">In practice, a temperature of 2 worked best across all tasks.</mark></p>
+    </div>
+    <dl class="key-list">
+      <div><dt><i class="sw claim"></i>Key claims</dt><dd>What the paper says it shows.</dd></div>
+      <div><dt><i class="sw key"></i>Important</dt><dd>Sentences the argument leans on.</dd></div>
+      <div><dt><i class="sw complex"></i>Complex</dt><dd>Dense reasoning, with a plain-language note.</dd></div>
+      <div><dt><i class="sw definition"></i>Definitions</dt><dd>New terms, where they are introduced.</dd></div>
+      <div class="labels"><dt>Section labels</dt><dd><span class="tag study">Study</span><span class="tag read">Read</span><span class="tag skim">Skim</span><span class="tag skip">Skip</span></dd></div>
+    </dl>
+  </section>
+
+  <section class="recent hidden" id="recent">
+    <h2>Recently read</h2>
+    <ol id="recentList"></ol>
+  </section>
+
+  <footer class="foot" id="foot"></footer>
+</main>
+
+<main id="loading" class="loading view hidden" aria-live="polite">
+  <p class="eyebrow">Reading</p>
+  <h2 id="loadingSource"></h2>
+  <div class="bar"><div id="barFill"></div></div>
+  <p id="stage" class="stage">Starting</p>
+  <a href="/" class="linkish" id="cancelLink">Cancel</a>
+</main>
+
+<main id="error" class="error view hidden" role="alert">
+  <p class="eyebrow">Could not read that</p>
+  <p id="errorMsg" class="error-msg"></p>
+  <div class="error-actions">
+    <button class="btn primary" type="button" id="retryBtn">Try again</button>
+    <a class="btn quiet" href="/">Back to home</a>
+  </div>
+</main>
+
+<div id="readerView" class="reader-view view hidden">
+  <div class="reading">
+    <div id="live" class="live hidden" aria-live="polite">
+      <div class="live-bar"><div id="liveFill"></div></div>
+      <span id="liveStage">Analyzing</span>
+    </div>
+    <p id="banner" class="banner hidden"></p>
+    <div id="reader" class="reader"></div>
+  </div>
+  <aside id="panel" class="panel" aria-label="Reading plan">
+    <div class="tabs" role="tablist">
+      <button class="tab on" data-tab="plan" role="tab" type="button">Plan</button>
+      <button class="tab" data-tab="claims" role="tab" type="button">Claims</button>
+      <button class="tab" data-tab="prereq" role="tab" type="button">Prerequisites</button>
+      <button class="close" id="panelClose" type="button" aria-label="Close panel">Close</button>
+    </div>
+    <div class="tabbody" id="tab-plan"></div>
+    <div class="tabbody hidden" id="tab-claims"></div>
+    <div class="tabbody hidden" id="tab-prereq"></div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+</div>
+
+<div class="drop-overlay" id="dropOverlay"><div>Drop to highlight this file</div></div>
+<div id="tip" class="tip hidden" role="tooltip"></div>
+<script src="/app.js"></script>
+</body>
+</html>
