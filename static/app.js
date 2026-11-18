@@ -80,14 +80,7 @@ function setStage(stage, p) { $("#stage").textContent = stage; $("#barFill").sty
 
 function setLive(s) {
   const live = $("#live");
-  if (!live) return;
-  if (!s || s.status === "done") {
-    live.classList.add("hidden");
-    return;
-  }
-  live.classList.remove("hidden");
-  $("#liveStage").textContent = s.stage || "Analyzing";
-  $("#liveFill").style.width = Math.max(2, Math.round(100 * (s.progress || 0))) + "%";
+  if (live) live.classList.add("hidden");
 }
 
 function docSig(doc) {
@@ -102,9 +95,14 @@ async function poll(id, my = ++run) {
     try { r = await fetch("/api/status/" + id); s = await r.json().catch(() => ({})); }
     catch (e) { if (my === run) fail("Lost the connection to the server."); return; }
     if (my !== run) return;
-    if (!r.ok) return fail(r.status === 404 ? "This document is not on the server any more. Start again from the home page." : (s.detail || "Unknown document."));
+    if (!r.ok) {
+      const dr = await fetch("/api/doc/" + id);
+      if (my !== run) return;
+      if (dr.ok) { render(await dr.json()); return; }
+      return fail(r.status === 404 ? "This document is not on the server any more. Start again from the home page." : (s.detail || "Unknown document."));
+    }
     if (s.status === "error") { setLive(null); return fail(s.error || "Analysis failed."); }
-    setStage(s.stage || "Working", s.progress || 0);
+    if (!opened) setStage("Opening the document", s.progress || 0);
     if (s.ready || s.status === "done") {
       const dr = await fetch("/api/doc/" + id);
       if (my !== run) return;

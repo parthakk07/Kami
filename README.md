@@ -78,7 +78,7 @@ Set one key. The provider is picked automatically from the first key found, or f
 | gemini | GEMINI_API_KEY | gemini-2.5-flash |
 | xai | XAI_API_KEY | grok-3-mini |
 | groq | GROQ_API_KEY | llama-3.3-70b-versatile |
-| openrouter | OPENROUTER_API_KEY | openai/gpt-4.1-mini |
+| openrouter | OPENROUTER_API_KEY | google/gemini-2.5-flash |
 | mock | none | offline heuristic demo |
 
 `LLM_BASE_URL` points any OpenAI-compatible provider at another server, for example a local Ollama (`LLM_PROVIDER=openai`, `OPENAI_API_KEY=ollama`, `LLM_BASE_URL=http://localhost:11434/v1`, `LLM_MODEL=qwen2.5:7b`).

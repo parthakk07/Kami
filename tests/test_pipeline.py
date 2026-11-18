@@ -89,7 +89,7 @@ def test_openai_compatible_provider(doc):
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             assert self.headers["Authorization"] == "Bearer test-key"
-            assert body["max_tokens"] == 2048
+            assert body["max_tokens"] == 1024
             prompt = body["messages"][-1]["content"]
             # answer in a markdown fence to exercise JSON extraction
             content = "```json\n" + json.dumps({"claims": [{"id": "C1", "claim": "Transformers use only attention.",

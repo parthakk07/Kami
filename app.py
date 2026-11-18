@@ -74,14 +74,35 @@ def _normalize_url(url: str) -> str:
 
 
 BROWSER_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/pdf,image/*;q=0.9,*/*;q=0.8",
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/pdf,application/xml;q=0.9,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
 }
+FIREFOX_UA = "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0"
 CITATION_PDF = [
     re.compile(r'<meta[^>]+name=["\']citation_pdf_url["\'][^>]+content=["\']([^"\']+)["\']', re.I),
     re.compile(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']citation_pdf_url["\']', re.I),
 ]
+
+
+def _pdf_guesses(url: str) -> list[str]:
+    """Other URLs to try when the HTML page is blocked."""
+    out = []
+    u = url.rstrip("/")
+    if not u.lower().endswith(".pdf"):
+        out.append(u + ".pdf")
+        out.append(re.sub(r"/html/", "/pdf/", u, flags=re.I))
+        out.append(re.sub(r"/abs/", "/pdf/", u, flags=re.I))
+        out.append(re.sub(r"/abstract", "/pdf", u, flags=re.I))
+        out.append(re.sub(r"/full(?:text)?", "/pdf", u, flags=re.I))
+    # unique, still different from the original
+    seen = {url, u}
+    return [g for g in out if g not in seen and not (g in seen or seen.add(g))]
 
 
 def _http_error(code: int) -> HTTPException:
@@ -100,10 +121,22 @@ def _http_error(code: int) -> HTTPException:
 async def _fetch(url: str) -> tuple[bytes, str, str]:
     """Download a link. Returns (data, content_type, final_url)."""
     url = _normalize_url(url)
+    parsed = httpx.URL(url)
+    headers = dict(BROWSER_HEADERS)
+    headers["Referer"] = f"{parsed.scheme}://{parsed.host}/"
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=45, headers=BROWSER_HEADERS) as c:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=45, headers=headers) as c:
             r = await c.get(url)
+            if r.status_code in (401, 403):
+                r = await c.get(url, headers={**headers, "User-Agent": FIREFOX_UA})
             if r.status_code >= 400:
+                for alt in _pdf_guesses(str(parsed)):
+                    try:
+                        r2 = await c.get(alt)
+                    except httpx.HTTPError:
+                        continue
+                    if r2.status_code < 400 and (_sniff(r2.content) == "pdf" or "pdf" in (r2.headers.get("content-type") or "").lower()):
+                        return r2.content, "application/pdf", str(r2.url)
                 raise _http_error(r.status_code)
             data = r.content
             ctype = r.headers.get("content-type", "").split(";")[0].strip().lower()
@@ -111,7 +144,6 @@ async def _fetch(url: str) -> tuple[bytes, str, str]:
             if kind and kind != "html":
                 return data, ctype, str(r.url)
             if kind == "html" or "html" in ctype or "xml" in ctype:
-                # Academic landing pages announce their PDF; prefer it over the page text.
                 html = r.text
                 for rx in CITATION_PDF:
                     m = rx.search(html)
@@ -140,6 +172,38 @@ def _doc_dir(doc_id: str) -> Path:
 def _result_path(doc_id: str, llm) -> Path:
     tag = re.sub(r"[^\w.\-]", "_", f"{llm.name}-{llm.model}")
     return _doc_dir(doc_id) / f"result-{tag}.json"
+
+
+def _read_json(path: Path):
+    try:
+        return json.loads(path.read_text())
+    except (ValueError, OSError):
+        return None
+
+
+def _find_result(doc_id: str) -> Path | None:
+    """Latest analysis on disk. Survives process restart and provider changes."""
+    d = DATA / doc_id
+    if not d.is_dir():
+        return None
+    try:
+        tagged = _result_path(doc_id, get_llm())
+        data = _read_json(tagged) if tagged.exists() else None
+        if data and not data.get("partial"):
+            return tagged
+    except LLMError:
+        tagged = None
+    complete, partial = [], []
+    for p in d.glob("result-*.json"):
+        data = _read_json(p)
+        if not data:
+            continue
+        (partial if data.get("partial") else complete).append(p)
+    pool = complete or partial
+    if not pool:
+        return None
+    pool.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return pool[0]
 
 
 def _parse(kind: str, data: bytes):
@@ -181,11 +245,9 @@ async def _process(doc_id: str, data: bytes, kind: str, source: str, force: bool
     try:
         llm = get_llm()
         out = _result_path(doc_id, llm)
-        if out.exists() and not force:
-            try:
-                cached = json.loads(out.read_text())
-            except ValueError:
-                cached = {}
+        cached_path = _find_result(doc_id)
+        if cached_path and not force:
+            cached = _read_json(cached_path) or {}
             if not cached.get("partial"):
                 job.update(status="done", stage="Loaded from cache", progress=1.0, ready=True)
                 return
@@ -288,29 +350,26 @@ async def sample(name: str):
 
 @app.get("/api/recent")
 async def recent(limit: int = 6):
-    try:
-        llm = get_llm()
-    except LLMError:
-        return []
     items = []
+    if not DATA.exists():
+        return []
     for d in DATA.iterdir():
         meta_p = d / "meta.json"
         if not (d.is_dir() and meta_p.exists() and re.fullmatch(r"[0-9a-f]{16}", d.name)):
             continue
-        res = _result_path(d.name, llm)
-        if not res.exists():
+        res = _find_result(d.name)
+        if not res:
             continue
-        try:
-            if json.loads(res.read_text()).get("partial"):
-                continue
-        except ValueError:
+        data = _read_json(res) or {}
+        if data.get("partial"):
             continue
         try:
             meta = json.loads(meta_p.read_text())
         except ValueError:
             continue
-        items.append({"doc_id": d.name, "title": meta.get("title") or meta.get("source", ""), "kind": meta.get("kind"),
-                      "source": meta.get("source", ""), "n_highlights": meta.get("n_highlights"),
+        items.append({"doc_id": d.name, "title": meta.get("title") or data.get("title") or meta.get("source", ""),
+                      "kind": meta.get("kind") or data.get("kind"),
+                      "source": meta.get("source", ""), "n_highlights": meta.get("n_highlights") or data.get("stats", {}).get("highlights"),
                       "time": meta.get("analyzed_at") or res.stat().st_mtime})
     items.sort(key=lambda x: -x["time"])
     return items[:max(1, min(limit, 20))]
@@ -319,23 +378,20 @@ async def recent(limit: int = 6):
 @app.get("/api/status/{doc_id}")
 async def status(doc_id: str):
     job = JOBS.get(doc_id)
-    if job is None:
-        try:
-            if _result_path(doc_id, get_llm()).exists():
-                return {"status": "done", "stage": "Loaded from cache", "progress": 1.0, "ready": True}
-        except LLMError as e:
-            return {"status": "error", "error": str(e)}
-        raise HTTPException(404, "unknown document")
-    return job
+    if job is not None:
+        return job
+    p = _find_result(doc_id)
+    if p:
+        data = _read_json(p) or {}
+        return {"status": "done", "stage": "Loaded from cache", "progress": 1.0,
+                "ready": True, "partial": bool(data.get("partial"))}
+    raise HTTPException(404, "unknown document")
 
 
 @app.get("/api/doc/{doc_id}")
 async def get_doc(doc_id: str):
-    p = _result_path(doc_id, get_llm())
-    if not p.exists():
-        job = JOBS.get(doc_id)
-        if job and job.get("status") == "running":
-            raise HTTPException(404, "not analyzed yet")
+    p = _find_result(doc_id)
+    if not p:
         raise HTTPException(404, "not analyzed yet")
     return Response(p.read_text(), media_type="application/json")
 
@@ -364,9 +420,8 @@ async def export_doc(doc_id: str, fmt: str = "md"):
     fmt = fmt.lower().strip()
     if fmt not in ("md", "txt", "pdf"):
         raise HTTPException(400, "Use fmt=pdf, md, or txt.")
-    llm = get_llm()
-    p = _result_path(doc_id, llm)
-    if not p.exists():
+    p = _find_result(doc_id)
+    if not p:
         raise HTTPException(404, "not analyzed yet")
     doc = json.loads(p.read_text())
     name = ex.slug(doc.get("title") or "kami")

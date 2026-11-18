@@ -157,6 +157,10 @@ def test_api_blog_link_sample_and_recent(site):
         assert s.status_code == 200
         sid = s.json()["doc_id"]
         assert _wait(c, sid)["status"] == "done"
+        webapp.JOBS.clear()
+        cached = c.get(f"/api/status/{sid}").json()
+        assert cached["status"] == "done" and cached.get("ready")
+        assert c.get(f"/api/doc/{sid}").json()["title"] == "Attention Is All You Need"
         assert c.post("/api/sample/nope").status_code == 404
 
         recent = c.get("/api/recent").json()
