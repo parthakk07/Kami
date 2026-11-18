@@ -16,6 +16,7 @@ from pathlib import Path
 import httpx
 import pymupdf
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from urllib.parse import quote
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -23,6 +24,7 @@ from pipeline import analyze
 from pipeline.llm import LLMError, get_llm, provider_status
 from pipeline.article import ArticleError, build_document, extract_article
 from pipeline.parse import parse_image, parse_pdf
+from pipeline import export as ex
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("paper")
@@ -355,6 +357,42 @@ async def page_image(doc_id: str, n: int):
             pdf[n].get_pixmap(matrix=pymupdf.Matrix(PAGE_ZOOM, PAGE_ZOOM)).save(out)
         await asyncio.to_thread(render)
     return FileResponse(out, headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/api/doc/{doc_id}/export")
+async def export_doc(doc_id: str, fmt: str = "md"):
+    fmt = fmt.lower().strip()
+    if fmt not in ("md", "txt", "pdf"):
+        raise HTTPException(400, "Use fmt=pdf, md, or txt.")
+    llm = get_llm()
+    p = _result_path(doc_id, llm)
+    if not p.exists():
+        raise HTTPException(404, "not analyzed yet")
+    doc = json.loads(p.read_text())
+    name = ex.slug(doc.get("title") or "kami")
+    if fmt == "md":
+        body = ex.notes_markdown(doc).encode("utf-8")
+        return Response(body, media_type="text/markdown; charset=utf-8",
+                        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}.md"})
+    if fmt == "txt":
+        body = ex.notes_text(doc).encode("utf-8")
+        return Response(body, media_type="text/plain; charset=utf-8",
+                        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}.txt"})
+    d = _doc_dir(doc_id)
+    meta = json.loads((d / "meta.json").read_text()) if (d / "meta.json").exists() else {}
+    kind = doc.get("kind") or meta.get("kind") or "pdf"
+    src = None
+    if kind == "pdf":
+        src = d / "source.pdf"
+    elif kind == "image":
+        ext = meta.get("ext") or "png"
+        src = d / f"source.{ext}"
+        if not src.exists():
+            src = next(d.glob("source.*"), None)
+    pdf_bytes = await asyncio.to_thread(ex.highlighted_pdf, src if src and src.exists() else None, kind,
+                                        doc.get("highlights") or [], doc)
+    return Response(pdf_bytes, media_type="application/pdf",
+                    headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}.pdf"})
 
 
 @app.get("/api/config")

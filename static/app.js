@@ -11,6 +11,10 @@ let pinned = null;
 let run = 0;          // bumps on every navigation so stale polls stop
 let lastInput = null; // for "Try again"
 let CONFIG = null;
+let zoom = 1;
+const ZOOM_MIN = 0.7;
+const ZOOM_MAX = 2;
+const ZOOM_STEP = 0.1;
 
 /* ---------- views and navigation ---------- */
 
@@ -30,6 +34,7 @@ function goHome(push = true) {
   $("#docTitle").textContent = "";
   $("#formError").textContent = "";
   document.title = "Kami";
+  setZoom(1);
   if (push && location.search) history.pushState(null, "", "/");
   show("home");
   loadRecent();
@@ -440,8 +445,68 @@ $$(".chip").forEach((c) => c.addEventListener("click", () => {
   c.classList.toggle("on");
   document.body.classList.toggle("off-" + c.dataset.type, !c.classList.contains("on"));
 }));
-document.addEventListener("click", (e) => { if (pinned && !e.target.closest("#tip")) { pinned = null; hideTip(); } });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { pinned = null; hideTip(); closePanel(); } });
+
+function setZoom(z) {
+  zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10));
+  $("#reader").style.setProperty("--zoom", String(zoom));
+  $("#zoomOut").disabled = zoom <= ZOOM_MIN;
+  $("#zoomIn").disabled = zoom >= ZOOM_MAX;
+}
+$("#zoomOut").addEventListener("click", () => setZoom(zoom - ZOOM_STEP));
+$("#zoomIn").addEventListener("click", () => setZoom(zoom + ZOOM_STEP));
+
+function dlOpen(on) {
+  $("#dlPop").classList.toggle("hidden", !on);
+  $("#downloadBtn").setAttribute("aria-expanded", on ? "true" : "false");
+}
+$("#downloadBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (!DOC) return;
+  dlOpen(true);
+});
+$("#dlPop").addEventListener("click", (e) => { if (e.target === $("#dlPop")) dlOpen(false); });
+$("#dlCancel").addEventListener("click", () => dlOpen(false));
+$$("#dlPop [data-fmt]").forEach((b) => b.addEventListener("click", () => {
+  downloadFmt(b.dataset.fmt);
+  dlOpen(false);
+}));
+
+async function downloadFmt(fmt) {
+  if (!DOC || !DOC.doc_id) return;
+  const r = await fetch(`/api/doc/${DOC.doc_id}/export?fmt=${encodeURIComponent(fmt)}`);
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    fail(typeof err.detail === "string" ? err.detail : "Could not export.");
+    return;
+  }
+  const blob = await r.blob();
+  const cd = r.headers.get("content-disposition") || "";
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+  const plain = /filename="?([^";]+)"?/i.exec(cd);
+  const name = decodeURIComponent((star && star[1]) || (plain && plain[1]) || `kami.${fmt}`);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+document.addEventListener("click", (e) => {
+  if (pinned && !e.target.closest("#tip")) { pinned = null; hideTip(); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { pinned = null; hideTip(); closePanel(); dlOpen(false); return; }
+  if (!document.body.classList.contains("view-reader")) return;
+  if (e.target.closest("input, textarea")) return;
+  if ((e.key === "+" || e.key === "=") && (e.ctrlKey || e.metaKey)) { e.preventDefault(); setZoom(zoom + ZOOM_STEP); }
+  if (e.key === "-" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); setZoom(zoom - ZOOM_STEP); }
+  if (e.key === "0" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); setZoom(1); }
+});
+$("#readerView").addEventListener("wheel", (e) => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  e.preventDefault();
+  setZoom(zoom + (e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP));
+}, { passive: false });
 
 /* ---------- home ---------- */
 

@@ -36,7 +36,14 @@ try {
   <button class="chip on" data-type="complex" type="button"><i></i>Complex<span class="n"></span></button>
   <button class="chip on" data-type="definition" type="button"><i></i>Definitions<span class="n"></span></button>
   <button class="chip on" data-type="badge" type="button"><i></i>Section labels<span class="n"></span></button>
+  <span class="zoom" role="group" aria-label="Zoom the paper">
+    <button type="button" id="zoomOut" aria-label="Zoom out">−</button>
+    <button type="button" id="zoomIn" aria-label="Zoom in">+</button>
+  </span>
   <span class="legend-meta" id="analyzerTag"></span>
+  <div class="dl-wrap">
+    <button type="button" class="dl" id="downloadBtn" aria-haspopup="dialog" aria-expanded="false">Download</button>
+  </div>
 </div>
 
 <main id="home" class="home view">
@@ -132,6 +139,25 @@ try {
 
 <div class="drop-overlay" id="dropOverlay"><div>Drop to highlight this file</div></div>
 <div id="tip" class="tip hidden" role="tooltip"></div>
+<div id="dlPop" class="dl-modal hidden" role="dialog" aria-modal="true" aria-labelledby="dlTitle">
+  <div class="dl-card">
+    <p class="dl-kicker">Export</p>
+    <h2 id="dlTitle" class="dl-title">Take the marked paper</h2>
+    <button type="button" data-fmt="pdf">
+      <span class="dl-name">PDF</span>
+      <span class="dl-hint">The full paper, with highlights on the page</span>
+    </button>
+    <button type="button" data-fmt="md">
+      <span class="dl-name">Markdown</span>
+      <span class="dl-hint">Notes you can paste into a repo or editor</span>
+    </button>
+    <button type="button" data-fmt="txt">
+      <span class="dl-name">Text</span>
+      <span class="dl-hint">Plain notes, no formatting</span>
+    </button>
+    <button type="button" class="dl-cancel" id="dlCancel">Cancel</button>
+  </div>
+</div>
 <script src="/app.js"></script>
 </body>
 </html>
